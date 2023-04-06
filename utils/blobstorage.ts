@@ -1,7 +1,7 @@
 import { BlobServiceClient } from "@azure/storage-blob";
 import config from "./config.json";
 
-export const uploadImage = async (imageBuffer: Buffer, mimeType: string) => {
+export const uploadImage = async (file: any, filename: string, mimeType: string) => {
     // Upload the Image to blob storage
     const blobServiceClient = BlobServiceClient.fromConnectionString(
         process.env.AZURE_STORAGE_CONNECTION_STRING
@@ -10,11 +10,9 @@ export const uploadImage = async (imageBuffer: Buffer, mimeType: string) => {
     const containerName = config.BLOB.containerName;
     const containerClient = blobServiceClient.getContainerClient(containerName);
 
-    const imageName = `image-${new Date().getTime()}`;
+    const imageName = `image-${new Date().getTime()}-${filename}`;
     const blockBlobClient = containerClient.getBlockBlobClient(imageName);
-
-    // Upload data to the blob
-    await blockBlobClient.upload(imageBuffer, imageBuffer.length, {
+    await blockBlobClient.uploadStream(file, undefined, undefined, {
         blobHTTPHeaders: { blobContentType: mimeType },
     });
 

@@ -2,50 +2,56 @@ import { Context, HttpRequest } from "@azure/functions";
 import { uploadImage } from "../utils/blobstorage";
 import { getDatabase } from "../utils/database";
 import { hashUserId } from "../utils/hash";
+import * as multipart from "parse-multipart";
 
 const newImage = async (context: Context, req: HttpRequest): Promise<void> => {
-    try {
-        const newImage = req.body;
+    if (!req.headers["content-type"] || !req.headers["content-type"].startsWith("multipart/form-data")) {
+        context.res = {
+            status: 400,
+            body: "Invalid Content-Type"
+        };
+        return;
+    }
 
-        // Validate there is a body and the body contains fields user, imageId, mimeType, and imageObj
-        if (!newImage || !newImage.user || !newImage.imageObj || !newImage.mimeType) {
+    try {
+        const boundary = multipart.getBoundary(req.headers["content-type"]);
+        const parts = multipart.Parse(Buffer.from(req.body), boundary);
+
+        const userIdPart = parts.find(part => part.name === "userId");
+        const imagePart = parts.find(part => part.name === "image");
+
+        if (!userIdPart || !imagePart) {
             context.res = {
                 status: 400,
-                body: "Please pass a valid image object in the request body",
+                body: "Invalid request, missing userId or image"
             };
             return;
         }
-        newImage.user = hashUserId(newImage.user);
 
-        // Upload image to blob storage
-        const imageBlobUrl = await uploadImage(newImage.imageObj, newImage.mimeType);
+        const userId = hashUserId(userIdPart.data.toString());
+        const mimeType = imagePart.type;
+        const imageBlobUrl = await uploadImage(imagePart.data, imagePart.filename, mimeType);
 
-        // Add the blob url to the image object
-        newImage.imageBlobUrl = imageBlobUrl;
-
-        // Delete the imageObj from the image object
-        delete newImage.imageObj;
-
-        // Get the database
+        // Create a DB record of the new image
         const container = await getDatabase();
+        const image = {
+            userId: userId,
+            imageBlobUrl: imageBlobUrl,
+            mimeType: mimeType
+        };
 
-        // Create the image document
-        const { resource: createdImage } = await container.items.create({ ...newImage });
+        const { resource: createdImage } = await container.items.create(image);
 
-        // Return the image document
         context.res = {
             status: 201,
-            body: {
-                msg: "Image created successfully.",
-                id: createdImage.id,
-                imageBlobUrl: createdImage.imageBlobUrl,
-            },
+            body: createdImage
         };
-    } catch (error) {
+    } catch (err) {
         context.res = {
             status: 500,
-            body: error.message,
+            body: "Internal Server Error - " + err.message
         };
+        return;
     }
 };
 
