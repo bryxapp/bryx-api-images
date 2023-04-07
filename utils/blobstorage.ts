@@ -1,22 +1,41 @@
 import { BlobServiceClient } from "@azure/storage-blob";
 import config from "./config.json";
+import * as multipart from "parse-multipart";
 
-export const uploadImage = async (file: any, filename: string, mimeType: string) => {
+export const uploadImage = async (file: multipart.ParsedFile) => {
+    const allowedMimeTypes = ["image/png", "image/jpeg"];
+    const maxSize = 20 * 1024 * 1024; // 20MB
+
+    if (!allowedMimeTypes.includes(file.type)) {
+        throw new Error("Invalid file type");
+    }
+
+    if (file.data.length > maxSize) {
+        throw new Error("File size too large");
+    }
+
     // Upload the Image to blob storage
     const blobServiceClient = BlobServiceClient.fromConnectionString(
         process.env.AZURE_STORAGE_CONNECTION_STRING
     );
-
     const containerName = config.BLOB.containerName;
     const containerClient = blobServiceClient.getContainerClient(containerName);
 
-    const imageName = `image-${new Date().getTime()}-${filename}`;
+    const imageName = `image-${new Date().getTime()}`;
+    const { data } = file;
     const blockBlobClient = containerClient.getBlockBlobClient(imageName);
-    await blockBlobClient.uploadStream(file, undefined, undefined, {
-        blobHTTPHeaders: { blobContentType: mimeType },
-    });
 
-    return blockBlobClient.url;
+    try {
+        const uploadOptions = {
+            blobHTTPHeaders: { blobContentType: file.type },
+            timeoutInSeconds: 25
+        };
+        await blockBlobClient.upload(data, data.length, uploadOptions);
+        return blockBlobClient.url;
+    } catch (error) {
+        console.error("Error uploading image to Azure Blob Storage", error);
+        throw error;
+    }
 };
 
 

@@ -13,30 +13,38 @@ const newImage = async (context: Context, req: HttpRequest): Promise<void> => {
         return;
     }
 
+    if (!req.body) {
+        context.res = {
+            status: 400,
+            body: "Invalid request, missing body"
+        };
+        return;
+    }
+
+    if (!req.query.userId) {
+        context.res = {
+            status: 400,
+            body: "Invalid request, missing userId"
+        };
+        return;
+    }
+
     try {
         const boundary = multipart.getBoundary(req.headers["content-type"]);
         const parts = multipart.Parse(Buffer.from(req.body), boundary);
 
-        const userIdPart = parts.find(part => part.name === "userId");
-        const imagePart = parts.find(part => part.name === "image");
-
-        if (!userIdPart || !imagePart) {
-            context.res = {
-                status: 400,
-                body: "Invalid request, missing userId or image"
-            };
-            return;
-        }
-
-        const userId = hashUserId(userIdPart.data.toString());
-        const mimeType = imagePart.type;
-        const imageBlobUrl = await uploadImage(imagePart.data, imagePart.filename, mimeType);
+        const userId = hashUserId(req.query.userId);
+        const file = parts[0];
+        const fileName = file.filename;
+        const mimeType = file.type;
+        const imageBlobUrl = await uploadImage(file);
 
         // Create a DB record of the new image
         const container = await getDatabase();
         const image = {
             userId: userId,
             imageBlobUrl: imageBlobUrl,
+            fileName: fileName,
             mimeType: mimeType
         };
 
