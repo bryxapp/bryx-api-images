@@ -42,7 +42,7 @@ const newImage = async (context: Context, req: HttpRequest): Promise<void> => {
         // Create a DB record of the new image
         const container = await getDatabase();
         const image = {
-            userId: userId,
+            user: userId,
             imageBlobUrl: imageBlobUrl,
             fileName: fileName,
             mimeType: mimeType
